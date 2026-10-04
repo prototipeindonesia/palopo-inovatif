@@ -65,6 +65,16 @@ input,select,textarea{font-family:inherit;outline:none}
 .nav-item.active{background:var(--blue-50);border-left-color:var(--blue-500);color:var(--blue-600);font-weight:600}
 .nav-item svg{width:18px;height:18px;flex-shrink:0}
 
+/* Menu Super Admin — aksen emas */
+.nav-item[data-view="admin-kelola"]:hover,
+.nav-item[data-view="admin-kelola"].active{
+  background:linear-gradient(90deg, rgba(245,158,11,.12), transparent);
+  color:#b45309;
+}
+.nav-item[data-view="admin-kelola"].active{
+  border-left-color:var(--gold);
+}
+
 .main{flex:1;margin-left:250px;min-width:0}
 .topbar{background:#fff;padding:14px 26px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
 .topbar .left{display:flex;align-items:center;gap:14px}
@@ -73,7 +83,8 @@ input,select,textarea{font-family:inherit;outline:none}
 .topbar .right{display:flex;align-items:center;gap:12px}
 .avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue-500),var(--navy-700));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;overflow:hidden;flex-shrink:0}
 .avatar img{width:100%;height:100%;object-fit:cover}
-.user-chip{display:flex;align-items:center;gap:10px;padding:5px 14px 5px 5px;background:var(--bg);border-radius:30px}
+.user-chip{display:flex;align-items:center;gap:10px;padding:5px 14px 5px 5px;background:var(--bg);border-radius:30px;transition:.2s}
+.user-chip:hover{background:#eef4ff}
 .user-chip .info{font-size:12px;line-height:1.2}
 .user-chip .info b{color:var(--navy-800);display:block;font-weight:600}
 .user-chip .info span{color:var(--muted);font-size:10.5px}
@@ -127,6 +138,7 @@ input,select,textarea{font-family:inherit;outline:none}
 .btn-success{background:var(--success);color:#fff}
 .btn-sm{padding:7px 13px;font-size:12px}
 .btn-gold{background:var(--gold);color:#fff}
+.btn-gold:hover:not(:disabled){background:#d97706;transform:translateY(-1px);box-shadow:0 8px 18px rgba(245,158,11,.3)}
 
 /* ===== TABLE ===== */
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -138,6 +150,31 @@ tr:hover td{background:#fafbfd}
 .tag-green{background:#d1fae5;color:#047857}
 .tag-gold{background:#fef3c7;color:#b45309}
 .tag-red{background:#fee2e2;color:#b91c1c}
+
+/* ===== TAG SUPER ADMIN ===== */
+.tag-super{
+  background:linear-gradient(135deg,#f59e0b,#dc2626);
+  color:#fff;
+  padding:4px 12px;
+  border-radius:20px;
+  font-size:10.5px;
+  font-weight:800;
+  letter-spacing:.3px;
+  box-shadow:0 2px 6px rgba(220,38,38,.25);
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+}
+.tag-super::before{
+  content:'';
+  width:6px;height:6px;border-radius:50%;
+  background:#fff;
+  animation:pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.5;transform:scale(1.2)}
+}
 
 /* ===== MODAL ===== */
 #modal{position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:200;padding:20px}
@@ -282,6 +319,19 @@ tr:hover td{background:#fafbfd}
 .field textarea{resize:vertical;min-height:80px;font-family:inherit}
 .field small{font-size:11px;color:var(--muted)}
 
+/* ===== PANEL SUPER ADMIN ===== */
+.sa-panel{
+  background:linear-gradient(135deg,var(--navy-800),var(--blue-600));
+  color:#fff;border-radius:var(--radius);padding:24px;
+  margin-bottom:18px;position:relative;overflow:hidden;
+}
+.sa-panel::before{
+  content:'👑';position:absolute;right:-20px;bottom:-20px;
+  font-size:140px;opacity:.08;line-height:1;
+}
+.sa-panel .sa-title{font-size:17px;font-weight:800;margin-bottom:6px}
+.sa-panel .sa-desc{font-size:13px;opacity:.9;line-height:1.6}
+
 /* ===== RESPONSIVE ===== */
 @media(max-width:900px){
   .sidebar{transform:translateX(-100%);box-shadow:var(--shadow-lg)}
@@ -306,6 +356,7 @@ tr:hover td{background:#fafbfd}
   .tabs button{font-size:12px;padding:9px}
   .material-item{gap:10px;padding:11px}
   .material-item .idx{width:26px;height:26px;font-size:11px}
+  .tag-super{font-size:9.5px;padding:3px 10px}
 }
 .overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:99;display:none}
 .overlay.show{display:block}
