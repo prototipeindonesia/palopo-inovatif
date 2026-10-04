@@ -90,7 +90,7 @@
   <div class="main">
     <div class="topbar">
       <div class="left">
-        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <button class="hamburger" onclick="toggleSidebar()" type="button">☰</button>
         <h3 id="pageTitle">Dashboard</h3>
       </div>
       <div class="right">
@@ -104,7 +104,14 @@
   </div>
 </div>
 
-<div id="modal" onclick="if(event.target.id==='modal')closeModal()"><div class="modal-box" id="modalBox"></div></div>
+<!-- MODAL dengan tombol close -->
+<div id="modal" onclick="if(event.target.id==='modal')closeModal()">
+  <div class="modal-box" id="modalBox">
+    <button class="modal-close" type="button" onclick="closeModal()" aria-label="Tutup">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <div id="loading" class="hidden"><div class="spinner"></div></div>
 
