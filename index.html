@@ -44,6 +44,7 @@
         <input type="password" id="loginPass" required placeholder="••••••••" autocomplete="current-password" />
       </div>
       <button class="btn btn-primary" type="submit">🔐 Masuk</button>
+      <button class="btn-forgot" type="button" onclick="openForgotPassword()">Lupa password?</button>
     </form>
 
     <!-- FORM REGISTER -->
@@ -63,6 +64,10 @@
       <div class="field">
         <label>OPD / Instansi</label>
         <input type="text" id="regOpd" required placeholder="Contoh: Bapperida" />
+      </div>
+      <div class="field">
+        <label>Nomor WhatsApp</label>
+        <input type="tel" id="regTel" required placeholder="08xxxxxxxxxx" />
       </div>
       <div class="field">
         <label>Password</label>
@@ -122,6 +127,9 @@
 
 <div id="toast"></div>
 <div id="loading" class="hidden"><div class="spinner"></div></div>
+
+<!-- SheetJS untuk Export/Import Excel -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script type="module" src="script.js"></script>
 </body>
