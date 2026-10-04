@@ -1,6 +1,6 @@
 /* =========================================================
    PALOPO INOVATIF
-   Firebase Auth (Google) + Firestore + Cloudinary
+   Firebase Auth (Google + Email/Password) + Firestore + Cloudinary
    ========================================================= */
 
 const firebaseConfig = {
@@ -22,7 +22,8 @@ const ADMIN_EMAILS = ["admin@palopo.go.id"];
 /* -------- IMPORT FIREBASE -------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
@@ -82,11 +83,21 @@ const ICONS = {
 };
 
 /* =========================================================
-   AUTH
+   AUTH — Google + Email/Password
    ========================================================= */
+
+// Buka tab Login / Register
+window.switchAuth = (mode) => {
+  document.getElementById("tabLogin").classList.toggle("active", mode === "login");
+  document.getElementById("tabReg").classList.toggle("active", mode === "reg");
+  document.getElementById("loginForm").classList.toggle("hidden", mode !== "login");
+  document.getElementById("regForm").classList.toggle("hidden", mode !== "reg");
+};
+
+// Login dengan Google
 window.loginWithGoogle = async () => {
   const btn = document.querySelector(".btn-google");
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   showLoading(true);
   try {
     const result = await signInWithPopup(auth, provider);
@@ -99,20 +110,95 @@ window.loginWithGoogle = async () => {
       role: role,
       lastLogin: serverTimestamp()
     }, { merge: true });
+    toast("Selamat datang, " + (user.displayName || "User").split(" ")[0] + "!", "success");
   } catch (e) {
     console.error(e);
-    toast("Gagal login: " + e.message, "error");
+    let msg = "Gagal login Google";
+    if (e.code === "auth/popup-blocked") msg = "Popup diblokir browser. Izinkan popup lalu coba lagi";
+    else if (e.code === "auth/popup-closed-by-user") msg = "Login dibatalkan";
+    else if (e.code === "auth/unauthorized-domain") msg = "Domain belum diizinkan di Firebase Console";
+    else if (e.code === "auth/network-request-failed") msg = "Koneksi internet bermasalah";
+    else msg = e.message;
+    toast(msg, "error");
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
     showLoading(false);
   }
 };
 
+// Login dengan Email & Password
+window.doLogin = async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+  const pass  = document.getElementById("loginPass").value;
+  showLoading(true);
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const user = cred.user;
+    const role = ADMIN_EMAILS.includes(user.email) ? "admin" : "user";
+    await setDoc(doc(db, "users", user.uid), {
+      role: role,
+      lastLogin: serverTimestamp()
+    }, { merge: true });
+    toast("Selamat datang, " + (user.displayName || user.email.split("@")[0]).split(" ")[0] + "!", "success");
+  } catch (err) {
+    console.error(err);
+    let msg = "Gagal login";
+    if (err.code === "auth/user-not-found") msg = "Email belum terdaftar";
+    else if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") msg = "Email atau password salah";
+    else if (err.code === "auth/invalid-email") msg = "Format email tidak valid";
+    else if (err.code === "auth/too-many-requests") msg = "Terlalu banyak percobaan, coba lagi nanti";
+    else if (err.code === "auth/network-request-failed") msg = "Koneksi internet bermasalah";
+    else msg = err.message;
+    toast(msg, "error");
+  } finally {
+    showLoading(false);
+  }
+};
+
+// Registrasi akun baru (Email & Password)
+window.doRegister = async (e) => {
+  e.preventDefault();
+  const nama = document.getElementById("regName").value.trim();
+  const email = document.getElementById("regEmail").value.trim().toLowerCase();
+  const nip  = document.getElementById("regNip").value.trim();
+  const opd  = document.getElementById("regOpd").value.trim();
+  const pass = document.getElementById("regPass").value;
+
+  showLoading(true);
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    const user = cred.user;
+    await updateProfile(user, { displayName: nama });
+    const role = ADMIN_EMAILS.includes(email) ? "admin" : "user";
+    await setDoc(doc(db, "users", user.uid), {
+      nama, email, nip, opd, role,
+      foto: "",
+      createdAt: serverTimestamp(),
+      lastLogin: serverTimestamp()
+    });
+    toast("Registrasi berhasil! Selamat datang, " + nama.split(" ")[0], "success");
+  } catch (err) {
+    console.error(err);
+    let msg = "Gagal mendaftar";
+    if (err.code === "auth/email-already-in-use") msg = "Email sudah terdaftar";
+    else if (err.code === "auth/weak-password") msg = "Password minimal 6 karakter";
+    else if (err.code === "auth/invalid-email") msg = "Format email tidak valid";
+    else if (err.code === "auth/network-request-failed") msg = "Koneksi internet bermasalah";
+    else msg = err.message;
+    toast(msg, "error");
+  } finally {
+    showLoading(false);
+  }
+};
+
+// Logout
 window.logout = async () => {
   await signOut(auth);
   toast("Anda telah keluar");
 };
 
+// Pantau status login
 onAuthStateChanged(auth, async (user) => {
   showLoading(true);
   try {
@@ -121,10 +207,12 @@ onAuthStateChanged(auth, async (user) => {
       const data = snap.exists() ? snap.data() : {};
       currentUser = {
         uid: user.uid,
-        nama: user.displayName || data.nama || "User",
-        email: user.email,
+        nama: user.displayName || data.nama || (user.email ? user.email.split("@")[0] : "User"),
+        email: user.email || "",
         foto: user.photoURL || data.foto || "",
-        role: ADMIN_EMAILS.includes(user.email) ? "admin" : (data.role || "user")
+        role: ADMIN_EMAILS.includes(user.email) ? "admin" : (data.role || "user"),
+        nip: data.nip || "",
+        opd: data.opd || ""
       };
       await loadAll();
       enterApp();
@@ -132,6 +220,11 @@ onAuthStateChanged(auth, async (user) => {
       currentUser = null;
       $("#app").classList.add("hidden");
       $("#loginScreen").classList.remove("hidden");
+      const lf = document.getElementById("loginForm");
+      const rf = document.getElementById("regForm");
+      if (lf) lf.reset();
+      if (rf) rf.reset();
+      if (typeof window.switchAuth === "function") window.switchAuth("login");
     }
   } catch (e) {
     console.error(e);
@@ -628,6 +721,8 @@ function viewProfil(){
       <table>
         <tr><td style="color:var(--muted);width:150px">Nama</td><td><b>${esc(currentUser.nama)}</b></td></tr>
         <tr><td style="color:var(--muted)">Email</td><td>${esc(currentUser.email)}</td></tr>
+        ${currentUser.nip?`<tr><td style="color:var(--muted)">NIP</td><td>${esc(currentUser.nip)}</td></tr>`:""}
+        ${currentUser.opd?`<tr><td style="color:var(--muted)">OPD</td><td>${esc(currentUser.opd)}</td></tr>`:""}
         <tr><td style="color:var(--muted)">Role</td><td>${currentUser.role}</td></tr>
         <tr><td style="color:var(--muted)">UID</td><td style="font-size:11px;font-family:monospace">${esc(currentUser.uid)}</td></tr>
       </table>
@@ -806,13 +901,15 @@ function viewAdminPengguna(){
   return `
     <div class="card" style="overflow-x:auto;padding:0">
       <table>
-        <thead><tr><th>Nama</th><th>Email</th><th>Role</th><th>Login Terakhir</th></tr></thead>
+        <thead><tr><th>Nama</th><th>Email</th><th>NIP</th><th>OPD</th><th>Role</th><th>Login Terakhir</th></tr></thead>
         <tbody>${allUsers.length ? allUsers.map(u=>`<tr>
           <td><b>${esc(u.nama||"-")}</b></td>
           <td>${esc(u.email||"-")}</td>
+          <td>${esc(u.nip||"-")}</td>
+          <td>${esc(u.opd||"-")}</td>
           <td>${u.role==="admin"?'<span class="tag tag-gold">Admin</span>':'<span class="tag tag-blue">Peserta</span>'}</td>
           <td>${fmtDate(u.lastLogin)}</td>
-        </tr>`).join("") : '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--muted)">Belum ada pengguna</td></tr>'}</tbody>
+        </tr>`).join("") : '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Belum ada pengguna</td></tr>'}</tbody>
       </table>
     </div>`;
 }
