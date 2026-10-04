@@ -1,6 +1,7 @@
 /* =========================================================
    PALOPO INOVATIF
    Firebase Auth (Google + Email/Password) + Firestore + Cloudinary
+   Mendukung 3 Role: Super Admin, Admin, Peserta
    ========================================================= */
 
 const firebaseConfig = {
@@ -16,7 +17,10 @@ const firebaseConfig = {
 const CLOUDINARY_CLOUD  = "kmvhvhct";
 const CLOUDINARY_PRESET = "palopo_inovatif_unsigned";
 
-// Email admin — ganti/tambah sesuai kebutuhan
+/* -------- KONFIGURASI ROLE -------- */
+// Super Admin: akses penuh, bisa kelola admin lain
+const SUPER_ADMIN_EMAILS = ["superadmin@palopo.go.id"];
+// Admin biasa: kelola kursus, lihat pengguna & laporan
 const ADMIN_EMAILS = ["admin@palopo.go.id"];
 
 /* -------- IMPORT FIREBASE -------- */
@@ -34,6 +38,21 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 const provider = new GoogleAuthProvider();
+
+/* -------- ROLE HELPERS -------- */
+function getUserRole(email, firestoreRole) {
+  if (!email) return "user";
+  const lower = email.toLowerCase();
+  if (SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(lower)) return "superadmin";
+  if (ADMIN_EMAILS.map(e => e.toLowerCase()).includes(lower)) return "admin";
+  return firestoreRole || "user";
+}
+function isAdminOrAbove(role) {
+  return role === "admin" || role === "superadmin";
+}
+function isSuperAdmin() {
+  return currentUser && currentUser.role === "superadmin";
+}
 
 /* -------- STATE -------- */
 let currentUser = null;
@@ -65,7 +84,7 @@ function toast(msg, type=""){
   t._t = setTimeout(()=>t.classList.remove("show"), 2800);
 }
 
-/* -------- MODAL (FIXED) -------- */
+/* -------- MODAL -------- */
 function _escModalHandler(e){ if (e.key === "Escape") closeModal(); }
 
 function openModal(html){
@@ -97,7 +116,8 @@ const ICONS = {
   logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
   kelola:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-  laporan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'
+  laporan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+  crown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20M4 20l2-10 5 5 1-8 1 8 5-5 2 10"/></svg>'
 };
 
 /* =========================================================
@@ -117,7 +137,7 @@ window.loginWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
-    const role = ADMIN_EMAILS.includes(user.email) ? "admin" : "user";
+    const role = getUserRole(user.email, "user");
     await setDoc(doc(db, "users", user.uid), {
       nama: user.displayName || "",
       email: user.email,
@@ -149,7 +169,7 @@ window.doLogin = async (e) => {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
-    const role = ADMIN_EMAILS.includes(user.email) ? "admin" : "user";
+    const role = getUserRole(user.email, "user");
     await setDoc(doc(db, "users", user.uid), {
       role: role,
       lastLogin: serverTimestamp()
@@ -183,7 +203,7 @@ window.doRegister = async (e) => {
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
     await updateProfile(user, { displayName: nama });
-    const role = ADMIN_EMAILS.includes(email) ? "admin" : "user";
+    const role = getUserRole(email, "user");
     await setDoc(doc(db, "users", user.uid), {
       nama, email, nip, opd, role,
       foto: "",
@@ -221,10 +241,14 @@ onAuthStateChanged(auth, async (user) => {
         nama: user.displayName || data.nama || (user.email ? user.email.split("@")[0] : "User"),
         email: user.email || "",
         foto: user.photoURL || data.foto || "",
-        role: ADMIN_EMAILS.includes(user.email) ? "admin" : (data.role || "user"),
+        role: getUserRole(user.email, data.role),
         nip: data.nip || "",
         opd: data.opd || ""
       };
+      // Simpan/update role di Firestore kalau berbeda (misal baru di-promote)
+      if (data.role !== currentUser.role) {
+        await setDoc(doc(db, "users", user.uid), { role: currentUser.role }, { merge: true });
+      }
       await loadAll();
       enterApp();
     } else {
@@ -250,8 +274,11 @@ onAuthStateChanged(auth, async (user) => {
    ========================================================= */
 async function loadAll(){
   await loadCourses();
-  if (currentUser.role === "admin") {
+  if (isAdminOrAbove(currentUser.role)) {
     await loadAllUsers();
+    if (currentUser.role === "superadmin") {
+      await loadUserData(); // super admin juga bisa lihat progress sendiri
+    }
   } else {
     await loadUserData();
   }
@@ -310,17 +337,34 @@ function starsHTML(avg, size=13){
    NAV
    ========================================================= */
 function renderNav(){
-  const isAdmin = currentUser.role === "admin";
-  const menu = isAdmin ? [
-    { sec:"Administrator" },
+  const role = currentUser.role;
+  const isSA = role === "superadmin";
+  const isA  = isAdminOrAbove(role);
+
+  const superMenu = [
+    { sec:"Super Admin" },
     { id:"admin-dashboard", ico:ICONS.dashboard, label:"Dashboard" },
-    { id:"admin-kursus", ico:ICONS.kelola, label:"Kelola Kursus" },
-    { id:"admin-pengguna", ico:ICONS.users, label:"Pengguna" },
-    { id:"admin-laporan", ico:ICONS.laporan, label:"Laporan" },
+    { id:"admin-kursus",    ico:ICONS.kelola,    label:"Kelola Kursus" },
+    { id:"admin-pengguna",  ico:ICONS.users,     label:"Semua Pengguna" },
+    { id:"admin-kelola",    ico:ICONS.crown,     label:"Kelola Admin" },
+    { id:"admin-laporan",   ico:ICONS.laporan,   label:"Laporan Global" },
     { sec:"Akun" },
     { id:"profil", ico:ICONS.profil, label:"Profil" },
     { id:"logout", ico:ICONS.logout, label:"Keluar" }
-  ] : [
+  ];
+
+  const adminMenu = [
+    { sec:"Administrator" },
+    { id:"admin-dashboard", ico:ICONS.dashboard, label:"Dashboard" },
+    { id:"admin-kursus",    ico:ICONS.kelola,    label:"Kelola Kursus" },
+    { id:"admin-pengguna",  ico:ICONS.users,     label:"Pengguna" },
+    { id:"admin-laporan",   ico:ICONS.laporan,   label:"Laporan" },
+    { sec:"Akun" },
+    { id:"profil", ico:ICONS.profil, label:"Profil" },
+    { id:"logout", ico:ICONS.logout, label:"Keluar" }
+  ];
+
+  const userMenu = [
     { sec:"Menu Utama" },
     { id:"dashboard", ico:ICONS.dashboard, label:"Dashboard" },
     { id:"katalog", ico:ICONS.katalog, label:"Katalog Kursus" },
@@ -330,6 +374,9 @@ function renderNav(){
     { id:"profil", ico:ICONS.profil, label:"Profil" },
     { id:"logout", ico:ICONS.logout, label:"Keluar" }
   ];
+
+  const menu = isSA ? superMenu : (isA ? adminMenu : userMenu);
+
   $("#navMenu").innerHTML = menu.map(m => m.sec
     ? `<div class="nav-section">${m.sec}</div>`
     : `<div class="nav-item" data-view="${m.id}" onclick="navClick('${m.id}')">${m.ico}<span>${m.label}</span></div>`
@@ -346,7 +393,8 @@ const TITLES = {
   dashboard:"Dashboard", katalog:"Katalog Kursus", "kursus-saya":"Kursus Saya",
   sertifikat:"Sertifikat Saya", profil:"Profil", player:"Ruang Belajar",
   "admin-dashboard":"Dashboard Admin", "admin-kursus":"Kelola Kursus",
-  "admin-pengguna":"Pengguna", "admin-laporan":"Laporan"
+  "admin-pengguna":"Pengguna", "admin-laporan":"Laporan",
+  "admin-kelola":"Kelola Admin"
 };
 
 window.navigate = (view) => {
@@ -357,7 +405,8 @@ window.navigate = (view) => {
     dashboard: viewDashboard, katalog: viewKatalog, "kursus-saya": viewKursusSaya,
     sertifikat: viewSertifikat, profil: viewProfil, player: viewPlayer,
     "admin-dashboard": viewAdminDash, "admin-kursus": viewAdminKursus,
-    "admin-pengguna": viewAdminPengguna, "admin-laporan": viewAdminLaporan
+    "admin-pengguna": viewAdminPengguna, "admin-laporan": viewAdminLaporan,
+    "admin-kelola": viewKelolaAdmin
   }[view];
   $("#viewContainer").innerHTML = R ? R() : '<div class="empty">Halaman tidak ditemukan</div>';
   window.scrollTo(0,0);
@@ -370,9 +419,11 @@ function enterApp(){
     ? `<img src="${currentUser.foto}" alt="">`
     : initial(currentUser.nama);
   $("#topName").textContent = currentUser.nama;
-  $("#topRole").textContent = currentUser.role === "admin" ? "Administrator" : "Peserta";
+  $("#topRole").textContent =
+    currentUser.role === "superadmin" ? "👑 Super Admin" :
+    currentUser.role === "admin" ? "Administrator" : "Peserta";
   renderNav();
-  navigate(currentUser.role === "admin" ? "admin-dashboard" : "dashboard");
+  navigate(isAdminOrAbove(currentUser.role) ? "admin-dashboard" : "dashboard");
 }
 
 /* =========================================================
@@ -730,12 +781,16 @@ window.printCert = (id) => {
 };
 
 function viewProfil(){
+  const roleLabel = currentUser.role === "superadmin" ? "👑 Super Admin"
+    : currentUser.role === "admin" ? "🛡️ Administrator" : "👤 Peserta";
+  const roleBg = currentUser.role === "superadmin" ? "linear-gradient(135deg,#f59e0b,#dc2626)"
+    : currentUser.role === "admin" ? "var(--gold)" : "var(--blue-600)";
   return `
     <div class="card" style="text-align:center;padding:30px;background:linear-gradient(135deg,var(--blue-50),#fff);border:1px solid var(--blue-100);margin-bottom:18px">
       <div class="avatar" style="width:80px;height:80px;font-size:30px;margin:0 auto 14px">${currentUser.foto?`<img src="${currentUser.foto}">`:initial(currentUser.nama)}</div>
       <h3 style="font-size:19px;color:var(--navy-800)">${esc(currentUser.nama)}</h3>
       <div style="font-size:13px;color:var(--muted);margin-top:4px">${esc(currentUser.email)}</div>
-      <div style="display:inline-block;margin-top:12px;padding:5px 14px;border-radius:20px;background:${currentUser.role==="admin"?"var(--gold)":"var(--blue-600)"};color:#fff;font-size:11px;font-weight:700">${currentUser.role==="admin"?"👑 Administrator":"👤 Peserta"}</div>
+      <div style="display:inline-block;margin-top:12px;padding:5px 14px;border-radius:20px;background:${roleBg};color:#fff;font-size:11px;font-weight:700">${roleLabel}</div>
     </div>
     <div class="card">
       <b style="display:block;margin-bottom:14px;color:var(--navy-800)">📋 Informasi Akun</b>
@@ -809,7 +864,7 @@ function viewAdminKursus(){
     </div>`;
 }
 
-/* ---------- FORM KURSUS BARU (detail + link YouTube/Drive) ---------- */
+/* ---------- FORM KURSUS BARU ---------- */
 window.formCourse = (id) => {
   const c = id ? courses.find(x=>x.id===id) : null;
   openModal(`
@@ -999,14 +1054,20 @@ function viewAdminPengguna(){
     <div class="card" style="overflow-x:auto;padding:0">
       <table>
         <thead><tr><th>Nama</th><th>Email</th><th>NIP</th><th>OPD</th><th>Role</th><th>Login Terakhir</th></tr></thead>
-        <tbody>${allUsers.length ? allUsers.map(u=>`<tr>
-          <td><b>${esc(u.nama||"-")}</b></td>
-          <td>${esc(u.email||"-")}</td>
-          <td>${esc(u.nip||"-")}</td>
-          <td>${esc(u.opd||"-")}</td>
-          <td>${u.role==="admin"?'<span class="tag tag-gold">Admin</span>':'<span class="tag tag-blue">Peserta</span>'}</td>
-          <td>${fmtDate(u.lastLogin)}</td>
-        </tr>`).join("") : '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Belum ada pengguna</td></tr>'}</tbody>
+        <tbody>${allUsers.length ? allUsers.map(u=>{
+          const sa = SUPER_ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((u.email||"").toLowerCase());
+          const tag = sa ? '<span class="tag tag-super">👑 Super Admin</span>'
+            : u.role==="admin" ? '<span class="tag tag-gold">Admin</span>'
+            : '<span class="tag tag-blue">Peserta</span>';
+          return `<tr>
+            <td><b>${esc(u.nama||"-")}</b></td>
+            <td>${esc(u.email||"-")}</td>
+            <td>${esc(u.nip||"-")}</td>
+            <td>${esc(u.opd||"-")}</td>
+            <td>${tag}</td>
+            <td>${fmtDate(u.lastLogin)}</td>
+          </tr>`;
+        }).join("") : '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Belum ada pengguna</td></tr>'}</tbody>
       </table>
     </div>`;
 }
@@ -1035,6 +1096,133 @@ function viewAdminLaporan(){
       </table>
     </div>`;
 }
+
+/* =========================================================
+   VIEW SUPER ADMIN — Kelola Admin
+   ========================================================= */
+function viewKelolaAdmin(){
+  if (!isSuperAdmin()) {
+    return '<div class="empty"><div class="ico">🔒</div><h4>Akses Terbatas</h4><p>Hanya Super Admin yang bisa mengakses halaman ini.</p></div>';
+  }
+
+  const usersList = allUsers.map(u => {
+    const isSA = SUPER_ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((u.email||"").toLowerCase());
+    const roleTag = isSA ? '<span class="tag tag-super">👑 Super Admin</span>'
+      : u.role === "admin" ? '<span class="tag tag-gold">Admin</span>'
+      : '<span class="tag tag-blue">Peserta</span>';
+
+    const actions = isSA
+      ? '<span style="font-size:11px;color:var(--muted)">—</span>'
+      : u.role === "admin"
+        ? `<button class="btn btn-danger btn-sm" onclick="demoteUser('${u.id}','${esc(u.email)}')">⬇ Turunkan</button>`
+        : `<button class="btn btn-primary btn-sm" onclick="promoteUser('${u.id}','${esc(u.email)}')">⬆ Jadikan Admin</button>`;
+
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar" style="width:34px;height:34px;font-size:12px">${u.foto?`<img src="${u.foto}">`:initial(u.nama||"?")}</div>
+          <b>${esc(u.nama||"-")}</b>
+        </div>
+      </td>
+      <td>${esc(u.email||"-")}</td>
+      <td>${esc(u.opd||"-")}</td>
+      <td>${roleTag}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+    <div class="card" style="background:linear-gradient(135deg,var(--navy-800),var(--blue-600));color:#fff;margin-bottom:18px;padding:24px">
+      <div style="font-size:32px;margin-bottom:6px">👑</div>
+      <b style="font-size:17px">Panel Super Admin</b>
+      <p style="font-size:13px;opacity:.9;margin-top:6px;line-height:1.6">
+        Anda dapat mengangkat atau menurunkan pengguna sebagai Admin. Role Super Admin
+        hanya bisa diubah melalui kode <code style="background:rgba(255,255,255,.15);padding:1px 6px;border-radius:4px">SUPER_ADMIN_EMAILS</code>.
+      </p>
+    </div>
+
+    <div class="section-title">👥 Semua Pengguna <small>${allUsers.length} akun</small></div>
+    <div class="card" style="overflow-x:auto;padding:0">
+      <table>
+        <thead><tr><th>Nama</th><th>Email</th><th>OPD</th><th>Role</th><th>Aksi</th></tr></thead>
+        <tbody>${usersList || '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted)">Belum ada pengguna</td></tr>'}</tbody>
+      </table>
+    </div>
+
+    <div class="section-title">💡 Info Role</div>
+    <div class="grid grid-3">
+      <div class="card">
+        <div style="font-size:26px">👑</div>
+        <b style="display:block;margin:8px 0 4px;color:var(--navy-800)">Super Admin</b>
+        <p style="font-size:12.5px;color:var(--muted);line-height:1.6">
+          Akses penuh ke semua fitur. Bisa mengelola admin lain. Ditentukan oleh <b>email</b> di kode.
+        </p>
+      </div>
+      <div class="card">
+        <div style="font-size:26px">🛡️</div>
+        <b style="display:block;margin:8px 0 4px;color:var(--navy-800)">Admin</b>
+        <p style="font-size:12.5px;color:var(--muted);line-height:1.6">
+          Bisa mengelola kursus, melihat pengguna & laporan. Tidak bisa mengangkat admin lain.
+        </p>
+      </div>
+      <div class="card">
+        <div style="font-size:26px">👤</div>
+        <b style="display:block;margin:8px 0 4px;color:var(--navy-800)">Peserta</b>
+        <p style="font-size:12.5px;color:var(--muted);line-height:1.6">
+          Mengikuti kursus, memberi ulasan, mendapat sertifikat.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+window.promoteUser = (uid, email) => {
+  if (!isSuperAdmin()) return toast("Hanya Super Admin", "error");
+  openModal(`
+    <h3>⬆ Jadikan Admin</h3>
+    <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin-bottom:14px">
+      Anda akan mengangkat <b>${esc(email)}</b> menjadi <b>Admin</b>. User ini akan mendapat akses
+      ke menu Kelola Kursus, Pengguna, dan Laporan.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Batal</button>
+      <button class="btn btn-primary" onclick="doSetRole('${uid}','admin')">Ya, Angkat</button>
+    </div>
+  `);
+};
+
+window.demoteUser = (uid, email) => {
+  if (!isSuperAdmin()) return toast("Hanya Super Admin", "error");
+  openModal(`
+    <h3>⬇ Turunkan Jadi Peserta</h3>
+    <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin-bottom:14px">
+      Anda akan menurunkan <b>${esc(email)}</b> dari Admin menjadi <b>Peserta</b>. Mereka akan kehilangan
+      akses ke menu admin.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Batal</button>
+      <button class="btn btn-danger" onclick="doSetRole('${uid}','user')">Ya, Turunkan</button>
+    </div>
+  `);
+};
+
+window.doSetRole = async (uid, newRole) => {
+  if (!isSuperAdmin()) return;
+  showLoading(true);
+  try {
+    await updateDoc(doc(db, "users", uid), { role: newRole, roleUpdatedAt: serverTimestamp() });
+    const u = allUsers.find(x => x.id === uid);
+    if (u) u.role = newRole;
+    closeModal();
+    navigate("admin-kelola");
+    toast(`✅ Role berhasil diubah menjadi ${newRole}`, "success");
+  } catch (e) {
+    console.error(e);
+    toast("Gagal ubah role: " + e.message, "error");
+  } finally {
+    showLoading(false);
+  }
+};
 
 /* =========================================================
    EXPOSE FUNGSI KE WINDOW (WAJIB untuk onclick di HTML)
