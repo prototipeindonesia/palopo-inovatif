@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Palopo Inovatif — Platform Pelatihan Mandiri</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">🎓</div>
+    <h1>Palopo Inovatif</h1>
+    <p class="sub">Platform Pelatihan Mandiri — Bapperida Kota Palopo</p>
+    <div class="tabs">
+      <button id="tabLogin" class="active" onclick="switchAuth('login')">Masuk</button>
+      <button id="tabReg" onclick="switchAuth('reg')">Daftar</button>
+    </div>
+
+    <form id="loginForm" onsubmit="doLogin(event)">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" required placeholder="nama@palopo.go.id" value="asn@palopo.go.id" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="loginPass" required value="user123" />
+      </div>
+      <button class="btn btn-primary" type="submit">🔐 Masuk</button>
+      <div class="demo-box">
+        <b>Akun Demo:</b><br>
+        <span class="demo-btn" onclick="fillDemo('admin')">👑 Admin</span>
+        <span class="demo-btn" onclick="fillDemo('user')">👤 User</span>
+      </div>
+    </form>
+
+    <form id="regForm" class="hidden" onsubmit="doRegister(event)">
+      <div class="field"><label>Nama Lengkap</label><input type="text" id="regName" required /></div>
+      <div class="field"><label>Email</label><input type="email" id="regEmail" required /></div>
+      <div class="field"><label>NIP</label><input type="text" id="regNip" required /></div>
+      <div class="field"><label>OPD / Instansi</label><input type="text" id="regOpd" required placeholder="Contoh: Bapperida" /></div>
+      <div class="field"><label>Password</label><input type="password" id="regPass" required minlength="4" /></div>
+      <button class="btn btn-primary" type="submit">📝 Daftar Sekarang</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="ico">🎓</div>
+      <div><h2>Palopo Inovatif</h2><span>Bapperida Kota Palopo</span></div>
+    </div>
+    <div id="navMenu"></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="left">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h3 id="pageTitle">Dashboard</h3>
+      </div>
+      <div class="right">
+        <div class="user-chip">
+          <div class="avatar" id="topAvatar">U</div>
+          <div class="info"><b id="topName">User</b><span id="topRole">Peserta</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="content" id="viewContainer"></div>
+  </div>
+</div>
+
+<div id="modal" onclick="if(event.target.id==='modal')closeModal()"><div class="modal-box" id="modalBox"></div></div>
+<div id="toast"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
