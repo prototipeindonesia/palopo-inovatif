@@ -64,9 +64,27 @@ function toast(msg, type=""){
   clearTimeout(t._t);
   t._t = setTimeout(()=>t.classList.remove("show"), 2800);
 }
-function openModal(html){ $("#modalBox").innerHTML = html; $("#modal").classList.add("open"); }
-function closeModal(){ $("#modal").classList.remove("open"); }
-function toggleSidebar(){ $("#sidebar").classList.toggle("open"); $("#overlay").classList.toggle("show"); }
+
+/* -------- MODAL (FIXED) -------- */
+function _escModalHandler(e){ if (e.key === "Escape") closeModal(); }
+
+function openModal(html){
+  const content = document.getElementById("modalContent");
+  if (content) content.innerHTML = html;
+  else document.getElementById("modalBox").innerHTML = html;
+  document.getElementById("modal").classList.add("open");
+  document.body.style.overflow = "hidden";
+  document.addEventListener("keydown", _escModalHandler);
+}
+function closeModal(){
+  document.getElementById("modal").classList.remove("open");
+  document.body.style.overflow = "";
+  document.removeEventListener("keydown", _escModalHandler);
+}
+function toggleSidebar(){
+  $("#sidebar").classList.toggle("open");
+  $("#overlay").classList.toggle("show");
+}
 function showLoading(b){ $("#loading").classList.toggle("hidden", !b); }
 
 /* -------- IKON SVG -------- */
@@ -85,8 +103,6 @@ const ICONS = {
 /* =========================================================
    AUTH — Google + Email/Password
    ========================================================= */
-
-// Buka tab Login / Register
 window.switchAuth = (mode) => {
   document.getElementById("tabLogin").classList.toggle("active", mode === "login");
   document.getElementById("tabReg").classList.toggle("active", mode === "reg");
@@ -94,7 +110,6 @@ window.switchAuth = (mode) => {
   document.getElementById("regForm").classList.toggle("hidden", mode !== "reg");
 };
 
-// Login dengan Google
 window.loginWithGoogle = async () => {
   const btn = document.querySelector(".btn-google");
   if (btn) btn.disabled = true;
@@ -126,7 +141,6 @@ window.loginWithGoogle = async () => {
   }
 };
 
-// Login dengan Email & Password
 window.doLogin = async (e) => {
   e.preventDefault();
   const email = document.getElementById("loginEmail").value.trim().toLowerCase();
@@ -156,7 +170,6 @@ window.doLogin = async (e) => {
   }
 };
 
-// Registrasi akun baru (Email & Password)
 window.doRegister = async (e) => {
   e.preventDefault();
   const nama = document.getElementById("regName").value.trim();
@@ -192,13 +205,11 @@ window.doRegister = async (e) => {
   }
 };
 
-// Logout
 window.logout = async () => {
   await signOut(auth);
   toast("Anda telah keluar");
 };
 
-// Pantau status login
 onAuthStateChanged(auth, async (user) => {
   showLoading(true);
   try {
@@ -508,10 +519,20 @@ function viewPlayer(){
         <div class="section-title">📚 Daftar Materi</div>
         ${c.materi.map((m,i)=>{
           const completed = done.includes(i);
+          const tipeLabel = m.tipe === "video" ? "🎬 Video" : m.tipe === "dokumen" ? "📄 Dokumen" : "🔗 Materi";
           return `<div class="material-item ${completed?'done':''}" onclick="toggleMateri('${c.id}',${i})">
             <div class="idx">${completed?'✓':i+1}</div>
-            <div style="flex:1"><div class="t">${esc(m.judul)}</div><div class="d">⏱️ ${m.durasi} menit</div></div>
-            <div style="font-size:18px">${completed?'✅':'⭕'}</div>
+            <div style="flex:1;min-width:0">
+              <div class="t">${esc(m.judul)}</div>
+              <div class="d">⏱️ ${m.durasi} menit • ${tipeLabel}</div>
+              ${m.deskripsi ? `<div class="d" style="margin-top:4px;color:var(--text)">${esc(m.deskripsi)}</div>` : ""}
+              ${(m.videoUrl || m.modulUrl) ? `
+                <div class="material-links" onclick="event.stopPropagation()">
+                  ${m.videoUrl ? `<a class="video" href="${esc(m.videoUrl)}" target="_blank" rel="noopener">▶ Buka Video</a>` : ""}
+                  ${m.modulUrl ? `<a class="modul" href="${esc(m.modulUrl)}" target="_blank" rel="noopener">📄 Buka Modul</a>` : ""}
+                </div>` : ""}
+            </div>
+            <div style="font-size:22px;flex-shrink:0">${completed?'✅':'⭕'}</div>
           </div>`;
         }).join("")}
 
@@ -788,32 +809,96 @@ function viewAdminKursus(){
     </div>`;
 }
 
+/* ---------- FORM KURSUS BARU (detail + link YouTube/Drive) ---------- */
 window.formCourse = (id) => {
   const c = id ? courses.find(x=>x.id===id) : null;
-  const materiText = c ? c.materi.map(m=>`${m.judul}|${m.durasi}`).join("\n") : "";
   openModal(`
-    <h3>${c?"✏️ Edit Kursus":"➕ Tambah Kursus"}</h3>
-    <div class="field"><label>Judul Kursus</label><input type="text" id="fcJudul" value="${c?esc(c.judul):""}" /></div>
-    <div class="field"><label>Deskripsi</label><textarea id="fcDesk" rows="3">${c?esc(c.deskripsi):""}</textarea></div>
-    <div class="grid grid-2" style="gap:10px">
-      <div class="field"><label>Kategori</label><select id="fcKat">${["Riset","Inovasi","Data","Manajemen","Lainnya"].map(k=>`<option ${c&&c.kategori===k?"selected":""}>${k}</option>`).join("")}</select></div>
-      <div class="field"><label>Level</label><select id="fcLvl">${["Dasar","Menengah","Lanjutan"].map(k=>`<option ${c&&c.level===k?"selected":""}>${k}</option>`).join("")}</select></div>
-      <div class="field"><label>JP</label><input type="number" id="fcJP" min="1" value="${c?c.jp:6}" /></div>
-      <div class="field"><label>Ikon (emoji)</label><input type="text" id="fcIkon" value="${c?c.ikon:"📘"}" maxlength="4" /></div>
+    <h3>${c?"✏️ Edit Kursus":"➕ Tambah Kursus Baru"}</h3>
+
+    <div class="form-section">
+      <div class="form-section-title"><span class="badge">1</span> Informasi Kursus</div>
+      <div class="field"><label>Judul Kursus *</label><input type="text" id="fcJudul" value="${c?esc(c.judul):""}" placeholder="Contoh: Design Thinking untuk Pelayanan Publik" /></div>
+      <div class="field"><label>Deskripsi *</label><textarea id="fcDesk" rows="3" placeholder="Jelaskan singkat isi & tujuan kursus ini...">${c?esc(c.deskripsi):""}</textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field"><label>Kategori *</label>
+          <select id="fcKat">${["Riset","Inovasi","Data","Manajemen","Lainnya"].map(k=>`<option ${c&&c.kategori===k?"selected":""}>${k}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label>Level *</label>
+          <select id="fcLvl">${["Dasar","Menengah","Lanjutan"].map(k=>`<option ${c&&c.level===k?"selected":""}>${k}</option>`).join("")}</select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field"><label>Jam Pelajaran (JP) *</label><input type="number" id="fcJP" min="1" value="${c?c.jp:6}" /></div>
+        <div class="field"><label>Ikon (emoji)</label><input type="text" id="fcIkon" value="${c?c.ikon:"📘"}" maxlength="4" placeholder="📘" /></div>
+      </div>
+      <div class="field"><label>Instruktur / Narasumber</label><input type="text" id="fcInstruktur" value="${c?esc(c.instruktur):""}" placeholder="Nama & gelar" /></div>
     </div>
-    <div class="field"><label>Instruktur</label><input type="text" id="fcInstruktur" value="${c?esc(c.instruktur):""}" /></div>
-    <div class="field"><label>Cover (upload ke Cloudinary)</label>
-      <input type="file" accept="image/*" onchange="uploadCover(this)" />
-      <input type="hidden" id="fcCover" value="${c?c.cover||"":""}" />
-      <div id="coverPreview">${c&&c.cover?`<img src="${c.cover}" style="width:100%;border-radius:10px;margin-top:8px">`:""}</div>
+
+    <div class="form-section">
+      <div class="form-section-title"><span class="badge">2</span> Cover Kursus (Opsional)</div>
+      <div class="field">
+        <input type="file" accept="image/*" onchange="uploadCover(this)" />
+        <input type="hidden" id="fcCover" value="${c?c.cover||"":""}" />
+        <div id="coverPreview">${c&&c.cover?`<img src="${c.cover}" style="width:100%;border-radius:10px;margin-top:8px">`:""}</div>
+        <span class="hint">Format JPG/PNG, maks 5MB. Akan diupload ke Cloudinary.</span>
+      </div>
     </div>
-    <div class="field"><label>Materi <small style="color:var(--muted)">(Judul|Durasi per baris)</small></label><textarea id="fcMateri" rows="5" placeholder="Pengantar|25">${materiText}</textarea></div>
+
+    <div class="form-section">
+      <div class="form-section-title"><span class="badge">3</span> Daftar Materi</div>
+      <div id="materiList"></div>
+      <button type="button" class="btn-add-materi" onclick="addMateriRow()">＋ Tambah Materi</button>
+    </div>
+
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Batal</button>
-      <button class="btn btn-primary" onclick="saveCourse('${id||""}')">💾 Simpan</button>
+      <button type="button" class="btn btn-ghost" onclick="closeModal()">Batal</button>
+      <button type="button" class="btn btn-primary" onclick="saveCourse('${id||""}')">💾 Simpan Kursus</button>
     </div>
   `);
+
+  const list = document.getElementById("materiList");
+  if (c && c.materi && c.materi.length) {
+    c.materi.forEach(m => addMateriRow(m));
+  } else {
+    addMateriRow();
+  }
 };
+
+window.addMateriRow = (data = {}) => {
+  const list = document.getElementById("materiList");
+  if (!list) return;
+  const row = document.createElement("div");
+  row.className = "materi-row";
+  const num = list.children.length + 1;
+  row.innerHTML = `
+    <div class="materi-row-head">
+      <span class="num">${num}</span>
+      <div class="actions">
+        <button type="button" onclick="this.closest('.materi-row').remove(); renumberMateri()" title="Hapus materi">✕</button>
+      </div>
+    </div>
+    <input class="m-judul" placeholder="Judul materi * (contoh: Pengantar Design Thinking)" value="${esc(data.judul||"")}" />
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <input class="m-durasi" type="number" min="1" placeholder="Durasi (menit)" value="${data.durasi||20}" />
+      <select class="m-tipe">
+        <option value="video" ${data.tipe==="video"?"selected":""}>🎬 Video</option>
+        <option value="dokumen" ${data.tipe==="dokumen"?"selected":""}>📄 Dokumen</option>
+        <option value="link" ${data.tipe==="link"?"selected":""}>🔗 Lainnya</option>
+      </select>
+    </div>
+    <textarea class="m-deskripsi" rows="2" placeholder="Deskripsi singkat materi (opsional)">${esc(data.deskripsi||"")}</textarea>
+    <input class="m-video" placeholder="🔗 Link YouTube — contoh: https://youtu.be/xxxxx" value="${esc(data.videoUrl||"")}" />
+    <input class="m-modul" placeholder="🔗 Link Google Drive — contoh: https://drive.google.com/file/d/xxxxx" value="${esc(data.modulUrl||"")}" />
+  `;
+  list.appendChild(row);
+};
+
+window.renumberMateri = () => {
+  document.querySelectorAll("#materiList .materi-row .num").forEach((el, i) => {
+    el.textContent = i + 1;
+  });
+};
+
 window.delCourse = (id) => {
   openModal(`<h3>🗑️ Hapus Kursus</h3><p style="color:var(--muted);margin-bottom:14px">Yakin ingin menghapus kursus ini? Tindakan ini tidak bisa dibatalkan.</p>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Batal</button>
@@ -844,25 +929,36 @@ window.uploadCover = async (input) => {
 };
 
 window.saveCourse = async (id) => {
-  const judul = $("#fcJudul").value.trim();
+  const judul = document.getElementById("fcJudul").value.trim();
+  const deskripsi = document.getElementById("fcDesk").value.trim();
   if (!judul) return toast("Judul wajib diisi", "error");
-  const materiRaw = $("#fcMateri").value.trim().split("\n").filter(l => l.trim());
-  const materi = materiRaw.map(l => {
-    const p = l.split("|");
-    return { judul: p[0].trim(), durasi: parseInt(p[1]) || 20 };
-  });
+  if (!deskripsi) return toast("Deskripsi wajib diisi", "error");
+
+  const rows = [...document.querySelectorAll("#materiList .materi-row")];
+  const materi = rows.map(row => ({
+    judul:     row.querySelector(".m-judul").value.trim(),
+    durasi:    parseInt(row.querySelector(".m-durasi").value) || 20,
+    tipe:      row.querySelector(".m-tipe").value,
+    deskripsi: row.querySelector(".m-deskripsi").value.trim(),
+    videoUrl:  row.querySelector(".m-video").value.trim(),
+    modulUrl:  row.querySelector(".m-modul").value.trim()
+  })).filter(m => m.judul);
+
+  if (!materi.length) return toast("Minimal 1 materi harus diisi judulnya", "error");
+
   const data = {
     judul,
-    deskripsi: $("#fcDesk").value.trim(),
-    kategori: $("#fcKat").value,
-    level: $("#fcLvl").value,
-    jp: parseInt($("#fcJP").value) || 6,
-    ikon: $("#fcIkon").value || "📘",
-    instruktur: $("#fcInstruktur").value.trim() || "Bapperida",
-    cover: $("#fcCover") ? $("#fcCover").value : "",
+    deskripsi,
+    kategori:   document.getElementById("fcKat").value,
+    level:      document.getElementById("fcLvl").value,
+    jp:         parseInt(document.getElementById("fcJP").value) || 6,
+    ikon:       document.getElementById("fcIkon").value || "📘",
+    instruktur: document.getElementById("fcInstruktur").value.trim() || "Bapperida",
+    cover:      document.getElementById("fcCover")?.value || "",
     materi,
-    updatedAt: serverTimestamp()
+    updatedAt:  serverTimestamp()
   };
+
   showLoading(true);
   try {
     if (id) {
@@ -874,8 +970,9 @@ window.saveCourse = async (id) => {
     await loadCourses();
     closeModal();
     navigate("admin-kursus");
-    toast(id ? "Kursus diperbarui!" : "Kursus ditambahkan!", "success");
+    toast(id ? "✅ Kursus diperbarui!" : "✅ Kursus ditambahkan!", "success");
   } catch (e) {
+    console.error(e);
     toast("Gagal simpan: " + e.message, "error");
   } finally {
     showLoading(false);
@@ -938,6 +1035,14 @@ function viewAdminLaporan(){
       </table>
     </div>`;
 }
+
+/* =========================================================
+   EXPOSE FUNGSI KE WINDOW (WAJIB untuk onclick di HTML)
+   ========================================================= */
+window.closeModal    = closeModal;
+window.openModal     = openModal;
+window.toggleSidebar = toggleSidebar;
+window.showLoading   = showLoading;
 
 /* =========================================================
    BOOT — ditangani onAuthStateChanged
